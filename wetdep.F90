@@ -617,13 +617,13 @@ main_i_loop: &
             ! calculate the fraction of strat precip from above 
             !                 which evaporates within this layer
             fracev(i) = evaps(i,k)*pdel(i,k)/gravit &
-                     /max(1.e-12_r8,precabs(i))
+                     /max(1.e-12_r8,precabs(i)) !!KZ!! equation (B5) for strat 
 
             ! trap to ensure reasonable ratio bounds
             fracev(i) = max(0._r8,min(1._r8,fracev(i)))
 
 ! Sungsu : Same as above but convective precipitation part
-            fracev_cu(i) = evapc(i,k)*pdel(i,k)/gravit/max(1.e-12_r8,precabc(i))
+            fracev_cu(i) = evapc(i,k)*pdel(i,k)/gravit/max(1.e-12_r8,precabc(i)) !!KZ!! equation (B5) for conv 
             fracev_cu(i) = max(0._r8,min(1._r8,fracev_cu(i)))
 ! Sungsu
 
@@ -846,33 +846,33 @@ jstrcnv_loop_aa: &
 
 ! step 1 - load working ("x") variables from stratiform ("s") or convective ("c") variables
             if (jstrcnv == 1) then
-               pprdx = precs(i,k)
-               evapx = evaps(i,k)
-               precabx_old = precabs(i)
+               pprdx = precs(i,k)              !!KZ!! WP_strat
+               evapx = evaps(i,k)              !!KZ!! EV_WP_strat
+               precabx_old = precabs(i)        !!KZ!! F_{W,k-1} = incoming stratiform precip flux 
                precabx_base_old = precabs_base(i)
                if ( mam_prevap_resusp_optcc <= 130) then
-                  scavabx_old = scavab(i)
+                  scavabx_old = scavab(i)      !!KZ!! FA_{k-1} = incoming scavenged aerosol flux
                   srcx = srcs
                else
-                  precnumx_base_old = precnums_base(i)
-                  arainx = cldvst(i,min(k+1,pver))
+                  precnumx_base_old = precnums_base(i)  !!KZ!! FN_{k-1} = incoming raindrop number flux
+                  arainx = cldvst(i,min(k+1,pver))      !!KZ!! Rain area for number flux normalization
                end if
             else
                pprdx = cmfdqr(i,k)
                evapx = evapc(i,k)
-               precabx_old = precabc(i)
-               precabx_base_old = precabc_base(i)
+               precabx_old = precabc(i)                 !!KZ!! F_{W,k-1} = incoming convective precip flux 
+               precabx_base_old = precabc_base(i)       !!KZ!! F_W^{base,k-1} = base convective precip flux 
                if ( mam_prevap_resusp_optcc <= 130) then
-                  scavabx_old = scavabc(i)
+                  scavabx_old = scavabc(i)              !!KZ!! FA_{k-1} = incoming scavenged aerosol flux 
                   srcx = srcc
                else
-                  precnumx_base_old = precnumc_base(i)
+                  precnumx_base_old = precnumc_base(i)  !!KZ!! FN_{k-1} = incoming raindrop number flux
                   arainx = cldvcu(i,min(k+1,pver))
                end if
             end if
 
 ! force these to be non-negative
-            precabx_base_old = max( 0.0_r8, precabx_base_old )
+            precabx_base_old = max( 0.0_r8, precabx_base_old )  !!KZ!! F_W^{base} ≥ 0
             precabx_old  = max( 0.0_r8, precabx_old )
             precabx_old  = min( precabx_base_old, precabx_old )
             if ( mam_prevap_resusp_optcc <= 130) then
@@ -884,27 +884,27 @@ jstrcnv_loop_aa: &
 
 ! step 2 - do evaporation and resuspension
             precabx_base_tmp = precabx_base_old
-            tmpa = max( 0.0_r8, evapx*pdel(i,k)/gravit )
-            precabx_tmp = max( 0.0_r8, precabx_old - tmpa )
-            precabx_tmp  = min( precabx_base_tmp, precabx_tmp )
+            tmpa = max( 0.0_r8, evapx*pdel(i,k)/gravit )        !!KZ!! EV_WP * Δp/g : evaporated precipitation mass in layer 
+            precabx_tmp = max( 0.0_r8, precabx_old - tmpa )     !!KZ!! F_{W,tmp} = F_{W,old} - EV_WP * Δp/g : Updated precipitation flux after evaporation (B1)
+            precabx_tmp  = min( precabx_base_tmp, precabx_tmp ) !!KZ!! F_{W,tmp} ≤ F_W^{base,tmp} 
 
             if (precabx_tmp < prec_smallaa) then
                ! precip rate is essentially zero so do complete resuspension
                if ( mam_prevap_resusp_optcc <= 130) then
                   ! linear resuspension based on scavenged aerosol mass or number
-                  scavabx_tmp = 0.0_r8
-                  resusp_x = scavabx_old
+                  scavabx_tmp = 0.0_r8                          !!KZ!! f^a = 0 (all aerosol resuspended) 
+                  resusp_x = scavabx_old                        !!KZ!! RES = FA_{k-1} (full return to interstitial)
                else
                   ! non-linear resuspension of aerosol number based on raindrop number
                   if (precabx_base_old < prec_smallaa) then
-                     resusp_x = 0.0_r8
+                     resusp_x = 0.0_r8                           !!KZ!! No base precip → no drops to evaporate
                   else
-                     u_old = precabx_old/precabx_base_old
-                     u_old = max( 0.0_r8, min( 1.0_r8, u_old ) )
+                     u_old = precabx_old/precabx_base_old        !!KZ!! f^u_{k-1} (B6/B14)
+                     u_old = max( 0.0_r8, min( 1.0_r8, u_old ) ) !!KZ!! 
                      x_old = 1.0_r8 - fprecn_resusp_vs_fprec_evap_mpln( 1.0_r8-u_old, jstrcnv )
                      x_old = max( 0.0_r8, min( 1.0_r8, x_old ) )
                      x_tmp = 0.0_r8
-                     resusp_x = max( 0.0_r8, precnumx_base_tmp*(x_old - x_tmp) )
+                     resusp_x = max( 0.0_r8, precnumx_base_tmp*(x_old - x_tmp) ) !!KZ!! Full drop number resuspension
                   end if
                end if
                ! setting both these precip rates to zero causes the resuspension 
@@ -915,29 +915,32 @@ jstrcnv_loop_aa: &
             else if (evapx <= 0.0_r8) then
                ! no evap so no resuspension
                if ( mam_prevap_resusp_optcc <= 130) then
-                  scavabx_tmp = scavabx_old
+                  scavabx_tmp = scavabx_old            !!KZ!! f^a = 1 (no change to aerosol flux)
                end if
                resusp_x = 0.0_r8
 
             else
-               u_old = precabx_old/precabx_base_old
-               u_old = max( 0.0_r8, min( 1.0_r8, u_old ) )
+               u_old = precabx_old/precabx_base_old          !!KZ!! f^u_{k-1} = F_{W,k-1} / F_W^{base,k-1} : Compute normalized precipitation fractions (B6/B14) 
+               u_old = max( 0.0_r8, min( 1.0_r8, u_old ) )   !!KZ!! 0 ≤ f^u_{k-1} ≤ 1 
                if ( mam_prevap_resusp_optcc <= 130) then
                   ! non-linear resuspension of aerosol mass
-                  x_old = 1.0_r8 - faer_resusp_vs_fprec_evap_mpln( 1.0_r8-u_old, jstrcnv )
+                  !!KZ!! φ(f_EV_WP) = faer_resusp_vs_fprec_evap_* (Marshall-Palmer or log-normal)
+                  !!KZ!! x_old = remaining aerosol fraction = 1 - φ(1 - u_old)
+                  x_old = 1.0_r8 - faer_resusp_vs_fprec_evap_mpln( 1.0_r8-u_old, jstrcnv ) 
                else 
                   ! non-linear resuspension of aerosol number based on raindrop number
+                  !!KZ!! φ(f_EV_WP) = fprecn_resusp_vs_fprec_evap_* for drop number evaporation fraction
                   x_old = 1.0_r8 - fprecn_resusp_vs_fprec_evap_mpln( 1.0_r8-u_old, jstrcnv )
                end if
                x_old = max( 0.0_r8, min( 1.0_r8, x_old ) )
 
                if (x_old < x_smallaa) then
                   x_tmp = 0.0_r8
-                  x_ratio = 0.0_r8
+                  x_ratio = 0.0_r8 !!KZ!! f^a_{k-1} = 0 (effectively full resuspension) 
                else
-                  u_tmp = precabx_tmp/precabx_base_tmp
+                  u_tmp = precabx_tmp/precabx_base_tmp !!KZ!! f^u_k = F_{W,tmp} / F_W^{base,tmp} : Post-evaporation normalized fraction (u_k) (B15) 
                   u_tmp = max( 0.0_r8, min( 1.0_r8, u_tmp ) )
-                  u_tmp = min( u_tmp, u_old )
+                  u_tmp = min( u_tmp, u_old )          !!KZ!! f^u_k ≤ f^u_{k-1} (evaporation reduces precip) 
                   if ( mam_prevap_resusp_optcc <= 130) then
                      ! non-linear resuspension of aerosol mass
                      x_tmp = 1.0_r8 - faer_resusp_vs_fprec_evap_mpln( 1.0_r8-u_tmp, jstrcnv )
@@ -946,25 +949,25 @@ jstrcnv_loop_aa: &
                      x_tmp = 1.0_r8 - fprecn_resusp_vs_fprec_evap_mpln( 1.0_r8-u_tmp, jstrcnv )
                   end if
                   x_tmp = max( 0.0_r8, min( 1.0_r8, x_tmp ) )
-                  x_tmp = min( x_tmp, x_old )
-                  x_ratio = x_tmp/x_old
+                  x_tmp = min( x_tmp, x_old )                      !!KZ!! x_tmp ≤ x_old (resuspension can't decrease remaining fraction) 
+                  x_ratio = x_tmp/x_old !!KZ!! f^a_{k-1} = x_tmp / x_old
                   x_ratio = max( 0.0_r8, min( 1.0_r8, x_ratio ) )
                end if
 
                if ( mam_prevap_resusp_optcc <= 130) then
                   ! aerosol mass resuspension
                   scavabx_tmp = max( 0.0_r8, scavabx_old * x_ratio )
-                  resusp_x = max( 0.0_r8, scavabx_old - scavabx_tmp )
+                  resusp_x = max( 0.0_r8, scavabx_old - scavabx_tmp ) !!KZ!! (B16) 
                else
                   ! number resuspension
-                  resusp_x = max( 0.0_r8, precnumx_base_tmp*(x_old - x_tmp) )
+                  resusp_x = max( 0.0_r8, precnumx_base_tmp*(x_old - x_tmp) ) !!KZ!! (B23) 
                end if 
             end if
 
 ! step 3 - do precip production and scavenging
-            tmpa = max( 0.0_r8, pprdx*pdel(i,k)/gravit )
-            precabx_base_new = max( 0.0_r8, precabx_base_tmp + tmpa )
-            precabx_new = max( 0.0_r8, precabx_tmp + tmpa )
+            tmpa = max( 0.0_r8, pprdx*pdel(i,k)/gravit )               !!KZ!! WP * Δp/g
+            precabx_base_new = max( 0.0_r8, precabx_base_tmp + tmpa )  !!KZ!! F_{W,base,new} = F_{W,base,tmp} + WP * Δp/g
+            precabx_new = max( 0.0_r8, precabx_tmp + tmpa )            !!KZ!! F_{W,new} = F_{W,tmp} + WP * Δp/g
             precabx_new = min( precabx_base_new, precabx_new )
 
             if ( mam_prevap_resusp_optcc <= 130) then
@@ -979,7 +982,8 @@ jstrcnv_loop_aa: &
                   ! note - calc rainshaft number flux from rainshaft water flux, 
                   !    then multiply by rainshaft area to get grid-average number flux
                   arainx = max( arainx, 0.01_r8 )
-                  tmpa = arainx * flux_precnum_vs_flux_prec_mpln( (precabx_base_new/arainx), jstrcnv )
+                  !!KZ!! for (B22), the code overwrites/updates precnumx_base_new from precabx_base_new when production increases.  
+                  tmpa = arainx * flux_precnum_vs_flux_prec_mpln( (precabx_base_new/arainx), jstrcnv ) !!KZ!! (B18)
                   precnumx_base_new = max( 0.0_r8, tmpa )
                else
                   precnumx_base_new = precnumx_base_tmp
@@ -1083,11 +1087,16 @@ jstrcnv_loop_aa: &
             dblchek(i) = tracer(i,k) + deltat*scavt(i,k)
 
             ! now keep track of scavenged mass and precip
+            ! --- KZ --- 
+            !    FW_k = precabs(i) (or precabc(i)) 
+            ! WPROD_k = precs(i,k) (or cmfdqr(i,k)) 
+            ! WEVAP_k = evaps(i,k) (or evapc(i,k)) 
+
             if (mam_prevap_resusp_optcc <= 3) then
-               scavab(i) = scavab(i)*(1-fracev(i)) + srcs*pdel(i,k)/gravit
-               precabs(i) = precabs(i) + (precs(i,k) - evaps(i,k))*pdel(i,k)/gravit
-               scavabc(i) = scavabc(i)*(1-fracev_cu(i)) + srcc*pdel(i,k)/gravit
-               precabc(i) = precabc(i) + (cmfdqr(i,k) - evapc(i,k))*pdel(i,k)/gravit
+               scavab(i) = scavab(i)*(1-fracev(i)) + srcs*pdel(i,k)/gravit           !!KZ!! equation (B12) for strat
+               precabs(i) = precabs(i) + (precs(i,k) - evaps(i,k))*pdel(i,k)/gravit  !!KZ!! equation (B1) for strat
+               scavabc(i) = scavabc(i)*(1-fracev_cu(i)) + srcc*pdel(i,k)/gravit      !!KZ!! equation (B12) for conv
+               precabc(i) = precabc(i) + (cmfdqr(i,k) - evapc(i,k))*pdel(i,k)/gravit !!KZ!! equation (B1) for conv 
                if (mam_prevap_resusp_optcc == 3) then
                   scavab(i)  = max( 0.0_r8, scavab(i)  )
                   scavabc(i) = max( 0.0_r8, scavabc(i) )
